@@ -2,7 +2,6 @@ package zola
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -28,7 +27,7 @@ func processFile(seo *SeoHelper, filePath string) error {
 		return err
 	}
 
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
+	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
@@ -73,15 +72,18 @@ func ProcessFolder(contentFolder string) error {
 	return nil
 }
 
-func ExtractFrontMatterAndContent(filePath string) (*bytes.Buffer, *bytes.Buffer, error) {
+func ExtractFrontMatterAndContent(filePath string) (string, string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, nil, err
+		return "", "", err
 	}
 	defer file.Close()
 
-	frontMatterBuffer := bytes.NewBuffer([]byte{})
-	contentBuffer := bytes.NewBuffer([]byte{})
+	var frontMatterBuilder strings.Builder
+	frontMatterBuilder.Reset()
+
+	var contentBuilder strings.Builder
+	contentBuilder.Reset()
 
 	isProcessingFrontMatter := false
 
@@ -89,40 +91,40 @@ func ExtractFrontMatterAndContent(filePath string) (*bytes.Buffer, *bytes.Buffer
 
 	for scanner.Scan() {
 		text := scanner.Text()
-		if frontMatterBuffer.Len() == 0 && strings.TrimSpace(text) == "+++" {
+		if frontMatterBuilder.Len() == 0 && strings.TrimSpace(text) == "+++" {
 			isProcessingFrontMatter = true
 			continue
 		}
 
-		if frontMatterBuffer.Len() != 0 && strings.TrimSpace(text) == "+++" {
+		if frontMatterBuilder.Len() != 0 && strings.TrimSpace(text) == "+++" {
 			isProcessingFrontMatter = false
 			continue
 		}
 
 		if isProcessingFrontMatter {
-			frontMatterBuffer.WriteString(text)
-			frontMatterBuffer.WriteString("\n")
+			frontMatterBuilder.WriteString(text)
+			frontMatterBuilder.WriteString("\n")
 		} else {
-			contentBuffer.WriteString(text)
-			contentBuffer.WriteString("\n")
+			contentBuilder.WriteString(text)
+			contentBuilder.WriteString("\n")
 		}
 	}
 
-	return frontMatterBuffer, contentBuffer, nil
+	return frontMatterBuilder.String(), contentBuilder.String(), nil
 }
 
 func processMarkdownFileContent(seo *SeoHelper, filePath string) (string, error) {
-	frontMatterBuffer, contentBuffer, err := ExtractFrontMatterAndContent(filePath)
+	frontMatterContent, content, err := ExtractFrontMatterAndContent(filePath)
 	if err != nil {
 		return "", err
 	}
 
 	var frontMatter map[string]interface{}
-	if err := toml.Unmarshal(frontMatterBuffer.Bytes(), &frontMatter); err != nil {
+	if err := toml.Unmarshal([]byte(frontMatterContent), &frontMatter); err != nil {
 		return "", err
 	}
 
-	meta, err := seo.GetContentSeoMetadata(contentBuffer.String())
+	meta, err := seo.GetContentSeoMetadata(content)
 	if err != nil {
 		return "", err
 	}
@@ -141,23 +143,23 @@ func processMarkdownFileContent(seo *SeoHelper, filePath string) (string, error)
 		extra = map[string]interface{}{}
 	}
 
-	extra["keywords"] = strings.Join(meta.Keywords, ", ")
+	extra["keywords"] = strings.Join(meta.Keywords, ",")
 
 	frontMatter["extra"] = extra
 
-	newFrontMatterBuffter := bytes.NewBuffer([]byte{})
+	var newFrontMatterBuilder strings.Builder
 
-	if err := toml.NewEncoder(newFrontMatterBuffter).Encode(frontMatter); err != nil {
+	if err := toml.NewEncoder(&newFrontMatterBuilder).Encode(frontMatter); err != nil {
 		return "", err
 	}
 
-	newFileContentBuffer := bytes.NewBuffer([]byte{})
-	newFileContentBuffer.WriteString("+++\n")
-	newFileContentBuffer.WriteString(newFrontMatterBuffter.String())
-	newFileContentBuffer.WriteString("+++\n")
-	newFileContentBuffer.WriteString(contentBuffer.String())
+	var newFileContentBuilder strings.Builder
+	newFileContentBuilder.WriteString("+++\n")
+	newFileContentBuilder.WriteString(newFrontMatterBuilder.String())
+	newFileContentBuilder.WriteString("+++\n")
+	newFileContentBuilder.WriteString(content)
 
-	return newFileContentBuffer.String(), nil
+	return newFileContentBuilder.String(), nil
 }
 
 type SeoHelper struct {
@@ -185,7 +187,7 @@ type Meta struct {
 
 const systemPrompt = `
 作为一个SEO优化程序，接收用户发送的Markdown格式的文章内容，文章内容在两个 AABBCCDDEEFFGGHH 之间。请提取出关键词和描述，必须以 JSON 的形式返回。要求如下：
-* “关键词”尽量有辨识度，不一定是文本中出现的内容，也可能是根据文章内容总结的关键词，它以数组形式返回，键为 keywords。关键词不能有重复，最多为8个，最少2个；
+* “关键词”尽量有辨识度，不一定是文本中出现的内容，也可能是根据文章内容总结的关键词，它以数组形式返回，键为 keywords。关键词不能有重复，最多为8个，最少2个；不应该将特殊字符（如：#、@、$、%、&、*、^、~ 等）作为关键词。
 * “描述”，是文章的摘要，以字符串形式返回，键为 description。
 
 比如对于给定的文章内容，其输出格式为：
