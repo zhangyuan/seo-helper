@@ -115,9 +115,9 @@ func ExtractFrontMatterAndContent(filePath string) (string, string, string, erro
 			contentBuilder.WriteString(text)
 			contentBuilder.WriteString("\n")
 
-			if (seoIgnore == false) && strings.Contains(text, SEO_IGNORE) {
+			if !seoIgnore && strings.Contains(text, SEO_IGNORE) {
 				seoIgnore = true
-			} else if (seoIgnore == true) && strings.Contains(text, SEO_IGNORE) {
+			} else if seoIgnore && strings.Contains(text, SEO_IGNORE) {
 				seoIgnore = false
 			}
 
