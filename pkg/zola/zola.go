@@ -74,15 +74,18 @@ func ProcessFolder(contentFolder string) error {
 	return nil
 }
 
-func ExtractFrontMatterAndContent(filePath string) (string, string, error) {
+func ExtractFrontMatterAndContent(filePath string) (string, string, string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	defer file.Close()
 
 	var frontMatterBuilder strings.Builder
 	frontMatterBuilder.Reset()
+
+	var seoContentBuilder strings.Builder
+	seoContentBuilder.Reset()
 
 	var contentBuilder strings.Builder
 	contentBuilder.Reset()
@@ -109,6 +112,9 @@ func ExtractFrontMatterAndContent(filePath string) (string, string, error) {
 			frontMatterBuilder.WriteString(text)
 			frontMatterBuilder.WriteString("\n")
 		} else {
+			contentBuilder.WriteString(text)
+			contentBuilder.WriteString("\n")
+
 			if (seoIgnore == false) && strings.Contains(text, SEO_IGNORE) {
 				seoIgnore = true
 			} else if (seoIgnore == true) && strings.Contains(text, SEO_IGNORE) {
@@ -116,17 +122,17 @@ func ExtractFrontMatterAndContent(filePath string) (string, string, error) {
 			}
 
 			if !seoIgnore {
-				contentBuilder.WriteString(text)
-				contentBuilder.WriteString("\n")
+				seoContentBuilder.WriteString(text)
+				seoContentBuilder.WriteString("\n")
 			}
 		}
 	}
 
-	return frontMatterBuilder.String(), contentBuilder.String(), nil
+	return frontMatterBuilder.String(), contentBuilder.String(), seoContentBuilder.String(), nil
 }
 
 func processMarkdownFileContent(seo *SeoHelper, filePath string) (string, error) {
-	frontMatterContent, content, err := ExtractFrontMatterAndContent(filePath)
+	frontMatterContent, content, seoContent, err := ExtractFrontMatterAndContent(filePath)
 	if err != nil {
 		return "", err
 	}
@@ -136,7 +142,7 @@ func processMarkdownFileContent(seo *SeoHelper, filePath string) (string, error)
 		return "", err
 	}
 
-	meta, err := seo.GetContentSeoMetadata(content)
+	meta, err := seo.GetContentSeoMetadata(seoContent)
 	if err != nil {
 		return "", err
 	}
