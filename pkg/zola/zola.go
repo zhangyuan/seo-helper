@@ -16,7 +16,8 @@ import (
 	"github.com/volcengine/volcengine-go-sdk/volcengine"
 )
 
-const SEO_IGNORE = "SEO_IGNORE"
+const SEO_ON = "SEO:ON"
+const SEO_OFF = "SEO:OFF"
 
 func ProcessFile(filePath string) error {
 	seo := NewSeoHelper()
@@ -94,7 +95,7 @@ func ExtractFrontMatterAndContent(filePath string) (string, string, string, erro
 
 	scanner := bufio.NewScanner(file)
 
-	seoIgnore := false
+	seoToggle := SEO_ON
 
 	for scanner.Scan() {
 		text := scanner.Text()
@@ -115,13 +116,15 @@ func ExtractFrontMatterAndContent(filePath string) (string, string, string, erro
 			contentBuilder.WriteString(text)
 			contentBuilder.WriteString("\n")
 
-			if !seoIgnore && strings.Contains(text, SEO_IGNORE) {
-				seoIgnore = true
-			} else if seoIgnore && strings.Contains(text, SEO_IGNORE) {
-				seoIgnore = false
+			if strings.Contains(text, SEO_OFF) {
+				seoToggle = SEO_OFF
 			}
 
-			if !seoIgnore {
+			if strings.Contains(text, SEO_ON) {
+				seoToggle = SEO_ON
+			}
+
+			if seoToggle == SEO_ON {
 				seoContentBuilder.WriteString(text)
 				seoContentBuilder.WriteString("\n")
 			}
